@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Web Application - AWS Bedrock</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1><i class="fas fa-robot"></i> AI Web Application</h1>
+                    <p>Powered by AWS Bedrock</p>
+                </div>
+                <div class="header-right" id="header-auth">
+                    <div id="auth-buttons" class="auth-section">
+                        <button id="login-btn" class="btn-secondary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </button>
+                        <button id="register-btn" class="btn-primary">
+                            <i class="fas fa-user-plus"></i> Register
+                        </button>
+                    </div>
+                    <div id="user-section" class="user-section" style="display: none;">
+                        <div class="user-info">
+                            <i class="fas fa-user-circle"></i>
+                            <span id="username-display"></span>
+                        </div>
+                        <div class="user-menu">
+                            <button id="profile-btn" class="btn-secondary">
+                                <i class="fas fa-user"></i> Profile
+                            </button>
+                            <button id="history-btn" class="btn-secondary">
+                                <i class="fas fa-history"></i> History
+                            </button>
+                            <button id="logout-btn" class="btn-secondary">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <nav class="nav-tabs">
+        <div class="container">
+            <button class="tab-btn active" data-tab="chat">
+                <i class="fas fa-comments"></i> AI Chatbot
+            </button>
+            <button class="tab-btn" data-tab="document">
+                <i class="fas fa-file-alt"></i> Document Analyzer
+            </button>
+            <button class="tab-btn" data-tab="code">
+                <i class="fas fa-code"></i> Coding Assistant
+            </button>
+            <button class="tab-btn" data-tab="image-gen">
+                <i class="fas fa-image"></i> Image Generator
+            </button>
+            <button class="tab-btn" data-tab="image-analyze">
+                <i class="fas fa-search"></i> Image Analyzer
+            </button>
+            <button class="tab-btn" data-tab="history" id="history-tab" style="display: none;">
+                <i class="fas fa-history"></i> Activity History
+            </button>
+            <button class="tab-btn" data-tab="admin" id="admin-tab" style="display: none;">
+                <i class="fas fa-cog"></i> Admin Panel
+            </button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <!-- AI Chatbot Tab -->
+        <div id="chat" class="tab-content active">
+            <div class="feature-header">
+                <h2><i class="fas fa-comments"></i> AI Chatbot</h2>
+                <p>Chat with Claude AI for general questions and assistance</p>
+            </div>
+            <div class="chat-container">
+                <div id="chat-messages" class="chat-messages"></div>
+                <div class="chat-input-container">
+                    <input type="text" id="chat-input" placeholder="Type your message here..." />
+                    <button id="chat-send" class="btn-primary">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Document Analyzer Tab -->
+        <div id="document" class="tab-content">
+            <div class="feature-header">
+                <h2><i class="fas fa-file-alt"></i> Document Analyzer</h2>
+                <p>Upload documents for AI-powered analysis and insights</p>
+            </div>
+            <div class="upload-container">
+                <div class="upload-area" id="document-upload-area">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>Drag & drop your document here or click to browse</p>
+                    <input type="file" id="document-file" accept=".txt,.pdf,.doc,.docx" hidden>
+                    <button class="btn-secondary" onclick="document.getElementById('document-file').click()">
+                        Choose File
+                    </button>
+                </div>
+                <div id="document-result" class="result-container"></div>
+            </div>
+        </div>
+
+        <!-- Coding Assistant Tab -->
+        <div id="code" class="tab-content">
+            <div class="feature-header">
+                <h2><i class="fas fa-code"></i> Coding Assistant</h2>
+                <p>Get help with coding, debugging, and software development</p>
+            </div>
+            <div class="chat-container">
+                <div id="code-messages" class="chat-messages"></div>
+                <div class="chat-input-container">
+                    <textarea id="code-input" placeholder="Ask about code, request examples, or get help with debugging..." rows="3"></textarea>
+                    <button id="code-send" class="btn-primary">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Generator Tab -->
+        <div id="image-gen" class="tab-content">
+            <div class="feature-header">
+                <h2><i class="fas fa-image"></i> Image Generator</h2>
+                <p>Generate images using Amazon Titan Image Generator</p>
+            </div>
+            <div class="image-gen-container">
+                <div class="prompt-container">
+                    <textarea id="image-prompt" placeholder="Describe the image you want to generate..." rows="3"></textarea>
+                    <button id="generate-btn" class="btn-primary">
+                        <i class="fas fa-magic"></i> Generate Image
+                    </button>
+                </div>
+                <div id="generated-image" class="image-result"></div>
+            </div>
+        </div>
+
+        <!-- Image Analyzer Tab -->
+        <div id="image-analyze" class="tab-content">
+            <div class="feature-header">
+                <h2><i class="fas fa-search"></i> Image Analyzer</h2>
+                <p>Upload images for AI-powered analysis and description</p>
+            </div>
+            <div class="upload-container">
+                <div class="upload-area" id="image-upload-area">
+                    <i class="fas fa-image"></i>
+                    <p>Drag & drop your image here or click to browse</p>
+                    <input type="file" id="image-file" accept=".png,.jpg,.jpeg,.gif" hidden>
+                    <button class="btn-secondary" onclick="document.getElementById('image-file').click()">
+                        Choose Image
+                    </button>
+                </div>
+                <div id="image-analysis-result" class="result-container"></div>
+            </div>
+        </div>
+
+        <!-- Activity History Tab -->
+        <div id="history" class="tab-content">
+            <div class="feature-header">
+                <h2><i class="fas fa-history"></i> Activity History</h2>
+                <p>View your search history and activity logs</p>
+            </div>
+            <div class="history-container">
+                <div class="history-tabs">
+                    <button class="history-tab-btn active" data-history-tab="searches">
+                        <i class="fas fa-search"></i> Searches
+                    </button>
+                    <button class="history-tab-btn" data-history-tab="actions">
+                        <i class="fas fa-mouse-pointer"></i> Actions
+                    </button>
+                    <button class="history-tab-btn" data-history-tab="logins">
+                        <i class="fas fa-sign-in-alt"></i> Logins
+                    </button>
+                    <button class="history-tab-btn" data-history-tab="stats">
+                        <i class="fas fa-chart-bar"></i> Statistics
+                    </button>
+                </div>
+                <div class="history-content">
+                    <div id="searches-history" class="history-tab-content active">
+                        <div class="history-filters">
+                            <select id="search-type-filter">
+                                <option value="">All Types</option>
+                                <option value="chat">Chat</option>
+                                <option value="code">Code</option>
+                                <option value="document">Document</option>
+                                <option value="image_gen">Image Generation</option>
+                                <option value="image_analyze">Image Analysis</option>
+                            </select>
+                            <button id="load-searches" class="btn-primary">Load Searches</button>
+                        </div>
+                        <div id="searches-list" class="history-list"></div>
+                    </div>
+                    <div id="actions-history" class="history-tab-content">
+                        <div class="history-filters">
+                            <button id="load-actions" class="btn-primary">Load Actions</button>
+                        </div>
+                        <div id="actions-list" class="history-list"></div>
+                    </div>
+                    <div id="logins-history" class="history-tab-content">
+                        <div class="history-filters">
+                            <button id="load-logins" class="btn-primary">Load Logins</button>
+                        </div>
+                        <div id="logins-list" class="history-list"></div>
+                    </div>
+                    <div id="stats-history" class="history-tab-content">
+                        <div class="history-filters">
+                            <select id="stats-period">
+                                <option value="7">Last 7 days</option>
+                                <option value="30" selected>Last 30 days</option>
+                                <option value="90">Last 90 days</option>
+                            </select>
+                            <button id="load-stats" class="btn-primary">Load Statistics</button>
+                        </div>
+                        <div id="stats-content" class="stats-content"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Panel Tab -->
+        <div id="admin" class="tab-content">
+            <div class="feature-header">
+                <h2><i class="fas fa-cog"></i> Admin Panel</h2>
+                <p>Manage signup codes and system administration</p>
+            </div>
+            <div class="admin-container">
+                <div class="admin-tabs">
+                    <button class="admin-tab-btn active" data-admin-tab="signup-codes">
+                        <i class="fas fa-key"></i> Signup Codes
+                    </button>
+                    <button class="admin-tab-btn" data-admin-tab="user-management">
+                        <i class="fas fa-users"></i> User Management
+                    </button>
+                </div>
+                <div class="admin-content">
+                    <div id="signup-codes-admin" class="admin-tab-content active">
+                        <div class="admin-section">
+                            <h3>Generate New Signup Code</h3>
+                            <div class="code-generator">
+                                <div class="form-group">
+                                    <label for="code-expiry-days">Expires in (days):</label>
+                                    <select id="code-expiry-days">
+                                        <option value="1">1 day</option>
+                                        <option value="7" selected>7 days</option>
+                                        <option value="30">30 days</option>
+                                        <option value="90">90 days</option>
+                                        <option value="365">1 year</option>
+                                    </select>
+                                </div>
+                                <button id="generate-code-btn" class="btn-primary">
+                                    <i class="fas fa-plus"></i> Generate Code
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="admin-section">
+                            <h3>Existing Signup Codes</h3>
+                            <div class="codes-actions">
+                                <button id="refresh-codes-btn" class="btn-secondary">
+                                    <i class="fas fa-refresh"></i> Refresh
+                                </button>
+                            </div>
+                            <div id="signup-codes-list" class="codes-list">
+                                <p style="text-align: center; padding: 2rem; color: #666;">Click "Refresh" to load signup codes</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="user-management-admin" class="admin-tab-content">
+                        <div class="admin-section">
+                            <h3>User Management</h3>
+                            <div class="users-actions">
+                                <button id="refresh-users-btn" class="btn-secondary">
+                                    <i class="fas fa-refresh"></i> Refresh Users
+                                </button>
+                                <div class="search-users">
+                                    <input type="text" id="user-search" placeholder="Search users...">
+                                    <button id="search-users-btn" class="btn-secondary">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="users-list" class="users-list">
+                                <p style="text-align: center; padding: 2rem; color: #666;">Click "Refresh Users" to load users</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Authentication Modals -->
+    <div id="auth-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            
+            <!-- Login Form -->
+            <div id="login-form" class="auth-form">
+                <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
+                <form id="login-form-element">
+                    <div class="form-group">
+                        <label for="login-username">Username or Email:</label>
+                        <input type="text" id="login-username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password:</label>
+                        <input type="password" id="login-password" required>
+                    </div>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                </form>
+                <p class="auth-switch">
+                    Don't have an account? 
+                    <a href="#" id="show-register">Register here</a>
+                </p>
+            </div>
+
+            <!-- Register Form -->
+            <div id="register-form" class="auth-form" style="display: none;">
+                <h2><i class="fas fa-user-plus"></i> Register</h2>
+                <form id="register-form-element">
+                    <div class="form-group">
+                        <label for="register-username">Username:</label>
+                        <input type="text" id="register-username" required minlength="3">
+                        <small>At least 3 characters</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-email">Email:</label>
+                        <input type="email" id="register-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">Password:</label>
+                        <input type="password" id="register-password" required minlength="8">
+                        <small>At least 8 characters with letters and numbers</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-confirm-password">Confirm Password:</label>
+                        <input type="password" id="register-confirm-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-signup-code">Signup Code:</label>
+                        <input type="text" id="register-signup-code" required>
+                        <small>Enter the signup code provided by an administrator</small>
+                    </div>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-user-plus"></i> Register
+                    </button>
+                </form>
+                <p class="auth-switch">
+                    Already have an account? 
+                    <a href="#" id="show-login">Login here</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="profile-content">
+                <h2><i class="fas fa-user"></i> User Profile</h2>
+                <div id="profile-info">
+                    <div class="profile-field">
+                        <label>Username:</label>
+                        <span id="profile-username"></span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Email:</label>
+                        <span id="profile-email"></span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Member Since:</label>
+                        <span id="profile-created"></span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Last Login:</label>
+                        <span id="profile-last-login"></span>
+                    </div>
+                </div>
+                <div class="profile-actions">
+                    <button id="change-password-btn" class="btn-secondary">
+                        <i class="fas fa-key"></i> Change Password
+                    </button>
+                    <button id="export-data-btn" class="btn-secondary">
+                        <i class="fas fa-download"></i> Export Data
+                    </button>
+                </div>
+
+                <div id="change-password-form" style="display: none;">
+                    <hr>
+                    <h4>Change Password</h4>
+                    <form id="change-password-form-element">
+                        <div class="form-group">
+                            <label for="current-password">Current Password:</label>
+                            <input type="password" id="current-password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="new-password-profile">New Password:</label>
+                            <input type="password" id="new-password-profile" required minlength="8">
+                        </div>
+                        <div class="form-group">
+                            <label for="confirm-new-password">Confirm New Password:</label>
+                            <input type="password" id="confirm-new-password" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-save"></i> Save Password
+                            </button>
+                            <button type="button" id="cancel-change-password" class="btn-secondary">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Processing...</p>
+        </div>
+    </div>
+
+    <!-- User Management Modals -->
+    <div id="edit-user-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="user-edit-content">
+                <h2><i class="fas fa-user-edit"></i> Edit User</h2>
+                <form id="edit-user-form">
+                    <input type="hidden" id="edit-user-id">
+                    <div class="form-group">
+                        <label for="edit-username">Username:</label>
+                        <input type="text" id="edit-username" required minlength="3">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-email">Email:</label>
+                        <input type="email" id="edit-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="edit-is-active"> Active User
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="edit-is-admin"> Admin User
+                        </label>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <button type="button" class="btn-secondary" onclick="closeModal('edit-user-modal')">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="reset-password-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="password-reset-content">
+                <h2><i class="fas fa-key"></i> Reset Password</h2>
+                <form id="reset-password-form">
+                    <input type="hidden" id="reset-user-id">
+                    <div class="form-group">
+                        <label>User:</label>
+                        <span id="reset-username-display"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">New Password:</label>
+                        <input type="password" id="new-password" minlength="8">
+                        <small>Leave empty to generate a random password</small>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-key"></i> Reset Password
+                        </button>
+                        <button type="button" class="btn-secondary" onclick="closeModal('reset-password-modal')">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-action-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="confirm-content">
+                <h2><i class="fas fa-exclamation-triangle"></i> Confirm Action</h2>
+                <p id="confirm-message"></p>
+                <div class="form-actions">
+                    <button id="confirm-yes" class="btn-danger">
+                        <i class="fas fa-check"></i> Yes, Continue
+                    </button>
+                    <button id="confirm-no" class="btn-secondary" onclick="closeModal('confirm-action-modal')">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 AI Web Application. Powered by AWS Bedrock.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

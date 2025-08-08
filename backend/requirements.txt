@@ -1,0 +1,12 @@
+flask
+flask-cors
+flask-sqlalchemy
+flask-login
+flask-migrate
+boto3
+python-dotenv
+Pillow
+python-multipart
+werkzeug
+requests
+bcrypt
