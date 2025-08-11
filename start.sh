@@ -66,6 +66,10 @@ else
     echo "⚠️  Backend might not be running properly. Check the logs above."
 fi
 
+# Get the public IP address for external access
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")
+PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null || hostname -I | awk '{print $1}')
+
 # Start frontend server
 echo "Starting frontend on http://localhost:8000"
 python3 -m http.server 8000 &
@@ -73,8 +77,22 @@ FRONTEND_PID=$!
 
 echo ""
 echo "🎉 Application is now running!"
-echo "📱 Frontend: http://localhost:8000"
-echo "🔧 Backend API: http://localhost:5001"
+echo "📱 Local Frontend: http://localhost:8000"
+echo "🔧 Local Backend API: http://localhost:5001"
+echo ""
+if [ ! -z "$PUBLIC_IP" ]; then
+    echo "🌐 External Access URLs:"
+    echo "📱 Frontend: http://$PUBLIC_IP:8000"
+    echo "🔧 Backend API: http://$PUBLIC_IP:5001"
+    echo ""
+    echo "⚠️  Make sure your security group allows inbound traffic on ports 5001 and 8000"
+else
+    echo "🌐 Network Access URLs:"
+    echo "📱 Frontend: http://$PRIVATE_IP:8000"
+    echo "🔧 Backend API: http://$PRIVATE_IP:5001"
+    echo ""
+    echo "⚠️  Make sure your firewall allows inbound traffic on ports 5001 and 8000"
+fi
 echo ""
 echo "Press Ctrl+C to stop both servers"
 

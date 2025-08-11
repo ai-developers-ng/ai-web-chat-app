@@ -1,5 +1,19 @@
-// Configuration
-const API_BASE_URL = 'http://localhost:5001/api';
+// Configuration - Dynamic API URL based on current host
+const getApiBaseUrl = () => {
+    // Check if we're in development (localhost) or production
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        // Development mode - use localhost
+        return 'http://localhost:5001/api';
+    } else {
+        // Production mode - use current host with backend port
+        return `${protocol}//${hostname}:5001/api`;
+    }
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Global state
 let currentUser = null;

@@ -33,8 +33,8 @@ login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
 login_manager.login_message = 'Please log in to access this page.'
 
-# Configure CORS to support credentials
-CORS(app, supports_credentials=True, origins=['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5001', 'http://127.0.0.1:5001', 'http://localhost:8000', 'http://127.0.0.1:8000'])
+# Configure CORS to support credentials - Allow all origins for production deployment
+CORS(app, supports_credentials=True, origins=['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5001', 'http://127.0.0.1:5001', 'http://localhost:8000', 'http://127.0.0.1:8000'], allow_headers=['Content-Type', 'Authorization'], expose_headers=['*'], resources={r"/api/*": {"origins": "*"}})
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
