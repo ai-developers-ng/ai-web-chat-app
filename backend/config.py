@@ -14,7 +14,8 @@ class Config:
     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
     
     # Bedrock Model IDs
-    CLAUDE_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20240620-v1:0"
+    # Primary chat / code generation model (Meta Llama 3 instruct)
+    LLAMA_MODEL_ID = os.getenv('LLAMA_MODEL_ID', 'meta.llama3-70b-instruct-v1:0')
     TITAN_IMAGE_MODEL_ID = "amazon.titan-image-generator-v2:0"
     
     # Flask Configuration
@@ -30,7 +31,7 @@ class Config:
     ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx'}
     
     # Chat Configuration
-    MAX_TOKENS = 4000
+    MAX_TOKENS = int(os.getenv('MAX_TOKENS', '1024'))  # Max generation tokens for Llama
     TEMPERATURE = 0.7
     
     @staticmethod

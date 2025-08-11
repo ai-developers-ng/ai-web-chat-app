@@ -79,49 +79,43 @@ except Exception as e:
     logger.error(f"Failed to initialize AWS Bedrock client: {e}")
     bedrock_runtime = None
 
-def invoke_claude(prompt, system_prompt="You are a helpful AI assistant.", image_data=None, image_media_type=None):
-    """Invoke Claude model with the given prompt and optional image data"""
+def invoke_llama(prompt, system_prompt="You are a helpful AI assistant.", image_data=None, image_media_type=None):
+    """Invoke Meta Llama 3 instruct model with optional image (multi-modal not yet supported for all variants)."""
     if not bedrock_runtime:
         return {"error": "AWS Bedrock client not initialized"}
-    
+
     try:
-        # Construct message content based on whether an image is provided
-        if image_data and image_media_type:
-            message_content = [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": image_media_type,
-                        "data": image_data,
-                    },
-                },
-                {"type": "text", "text": prompt},
-            ]
-        else:
-            message_content = prompt
+        # Current Bedrock Meta Llama 3 models expect a simple JSON with a 'prompt' key.
+        # The previous implementation used a 'messages' structure (Anthropic style) which caused ValidationException.
+        # We combine system and user into a single prompt. Optionally we could add special tokens, but plain text works.
+        combined_prompt = f"System: {system_prompt}\nUser: {prompt}\nAssistant:"  # trailing 'Assistant:' to guide continuation
 
         body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": Config.MAX_TOKENS,
+            "prompt": combined_prompt,
+            "max_gen_len": Config.MAX_TOKENS,  # maps to maximum new tokens
             "temperature": Config.TEMPERATURE,
-            "system": system_prompt,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": message_content
-                }
-            ],
+            "top_p": 0.9
         }
-        
+
         response = bedrock_runtime.invoke_model(
-            modelId=Config.CLAUDE_MODEL_ID,
+            modelId=Config.LLAMA_MODEL_ID,
             body=json.dumps(body)
         )
-        
         response_body = json.loads(response['body'].read())
-        return {"response": response_body['content'][0]['text']}
-        
+
+        # Meta Llama on Bedrock typically returns either {'generation': '...'} or {'outputs':[{'text':'...'}]}.
+        text = response_body.get('generation')
+        if not text and 'outputs' in response_body:
+            outputs = response_body['outputs']
+            if outputs and isinstance(outputs, list):
+                first = outputs[0]
+                if isinstance(first, dict):
+                    text = first.get('text') or first.get('generation')
+        if not text:
+            # Fallback to stringifying (trim to avoid huge payloads)
+            text = json.dumps(response_body)[:10000]
+
+        return {"response": text}
     except ClientError as e:
         logger.error(f"AWS Bedrock error: {e}")
         return {"error": f"AWS Bedrock error: {str(e)}"}
@@ -187,7 +181,7 @@ def chat():
     # Log user action
     log_user_action('chat_request', {'message_length': len(message)})
     
-    result = invoke_claude(message, system_prompt)
+    result = invoke_llama(message, system_prompt)
     
     # Log search
     response_time = time.time() - start_time
@@ -229,7 +223,7 @@ def document_analyze():
             prompt = f"Please analyze the following document and provide a comprehensive summary, key points, and insights:\n\n{content}"
             system_prompt = "You are an expert document analyzer. Provide detailed analysis, summaries, and extract key insights from documents."
             
-            result = invoke_claude(prompt, system_prompt)
+            result = invoke_llama(prompt, system_prompt)
             
             # Log search
             response_time = time.time() - start_time
@@ -270,7 +264,7 @@ def code_chat():
     # Log user action
     log_user_action('code_chat_request', {'message_length': len(message)})
     
-    result = invoke_claude(message, system_prompt)
+    result = invoke_llama(message, system_prompt)
     
     # Log search
     response_time = time.time() - start_time
@@ -338,11 +332,9 @@ def analyze_image():
             prompt = "Please analyze this image in detail. Describe what you see, including objects, scenery, colors, and any text present."
             system_prompt = "You are an expert image analyst. Provide detailed descriptions and analysis of images, including objects, people, scenes, colors, composition, and artistic elements."
             
-            result = invoke_claude(
+            result = invoke_llama(
                 prompt,
-                system_prompt,
-                image_data=image_data,
-                image_media_type=image_media_type
+                system_prompt
             )
             
             # Log search
