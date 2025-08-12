@@ -17,6 +17,7 @@ class Config:
     # Primary chat / code generation model (Meta Llama 3 instruct)
     LLAMA_MODEL_ID = os.getenv('LLAMA_MODEL_ID', 'meta.llama3-70b-instruct-v1:0')
     TITAN_IMAGE_MODEL_ID = "amazon.titan-image-generator-v2:0"
+    TITAN_VISION_MODEL_ID = os.getenv('TITAN_VISION_MODEL_ID', '')  # Optional: Titan multimodal caption model
     
     # Flask Configuration
     SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here-change-in-production')
@@ -33,6 +34,12 @@ class Config:
     # Chat Configuration
     MAX_TOKENS = int(os.getenv('MAX_TOKENS', '1024'))  # Max generation tokens for Llama
     TEMPERATURE = 0.7
+
+    # Textract Async (PDF) Configuration
+    TEXTRACT_S3_BUCKET = os.getenv('TEXTRACT_S3_BUCKET', '')
+    TEXTRACT_S3_PREFIX = os.getenv('TEXTRACT_S3_PREFIX', 'uploads/textract/')
+    TEXTRACT_JOB_POLL_SECONDS = int(os.getenv('TEXTRACT_JOB_POLL_SECONDS', '2'))
+    TEXTRACT_JOB_TIMEOUT_SECONDS = int(os.getenv('TEXTRACT_JOB_TIMEOUT_SECONDS', '180'))
     
     @staticmethod
     def allowed_file(filename):

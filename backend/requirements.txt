@@ -10,3 +10,4 @@ python-multipart
 Werkzeug
 requests
 bcrypt
+python-docx
