@@ -7,12 +7,12 @@ import time
 
 logs_bp = Blueprint('logs', __name__)
 
-def log_search(search_type, query, response=None, response_time=None):
+def log_search(search_type, query, response=None, response_time=None, model_id=None):
     """Log a search/query activity"""
     if current_user.is_authenticated:
         ip_address = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'unknown'))
         user_agent = request.headers.get('User-Agent', 'unknown')
-        
+
         search_log = SearchLog(
             user_id=current_user.id,
             search_type=search_type,
@@ -20,7 +20,8 @@ def log_search(search_type, query, response=None, response_time=None):
             response=response,
             response_time=response_time,
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
+            model_id=model_id,
         )
         db.session.add(search_log)
         db.session.commit()
@@ -225,9 +226,9 @@ def get_user_stats():
                 'total': recent_actions
             },
             'login_stats': {
-                'total_logins': login_stats.total_logins or 0,
-                'successful_logins': login_stats.successful_logins or 0,
-                'failed_logins': login_stats.failed_logins or 0
+                'total_logins': (login_stats.total_logins or 0) if login_stats else 0,
+                'successful_logins': (login_stats.successful_logins or 0) if login_stats else 0,
+                'failed_logins': (login_stats.failed_logins or 0) if login_stats else 0,
             }
         }), 200
         

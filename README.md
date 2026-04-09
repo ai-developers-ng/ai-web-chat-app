@@ -1,340 +1,316 @@
-# AI Web Application with AWS Bedrock
+# AI Web Chat App
 
-A comprehensive web application featuring multiple AI-powered tools using AWS Bedrock's various models including Claude 3 and Titan Image Generator, with complete user authentication and activity logging.
+A full-stack AI assistant platform powered by AWS Bedrock. Supports multiple AI models, real-time streaming responses, document analysis, image generation, and image analysis — with full user authentication and activity logging.
+
+---
 
 ## Features
 
-🤖 **AI Chatbot** - General purpose conversational AI using Claude 3
-📄 **Document Analyzer** - Upload and analyze documents with AI insights
-💻 **Coding Assistant** - Specialized AI helper for programming tasks
-🎨 **Image Generator** - Create images from text prompts using Titan Image Generator
-🔍 **Image Analyzer** - Upload images for AI-powered analysis and description
-🔐 **User Authentication** - Secure login/register system with session management
-📊 **Activity Logging** - Comprehensive logging of all user actions and AI interactions
-📈 **Usage Statistics** - Detailed analytics and history tracking
-👤 **User Profiles** - Personal profiles with data export capabilities
+- **AI Chatbot** — Streaming chat with model selection
+- **Coding Assistant** — Syntax-highlighted code responses with language hints
+- **Document Analyzer** — Upload and analyze TXT, PDF, DOCX files
+- **Image Generator** — Text-to-image via Titan Image Generator
+- **Image Analyzer** — AWS Rekognition + Textract OCR
+- **User Authentication** — Register, login, sessions, admin panel
+- **Activity Logging** — Full history of queries, actions, and logins
 
-## Architecture
+## Available Models (all via AWS Bedrock)
 
-- **Frontend**: Modern HTML5, CSS3, and JavaScript with responsive design
-- **Backend**: Python Flask API server with SQLAlchemy ORM
-- **Database**: SQLite (default) with support for PostgreSQL/MySQL
-- **Authentication**: Flask-Login with secure session management
-- **AI Models**: AWS Bedrock (Claude 3, Titan Image Generator)
-- **File Handling**: Support for documents and images
-- **Logging**: Comprehensive activity and usage tracking
+| Model | Key |
+|---|---|
+| Claude Sonnet 4.5 | `claude-sonnet-4-5` |
+| Claude Opus 4.5 | `claude-opus-4-5` |
+| Llama 3 70B | `llama3-70b` |
+| Llama 3 8B | `llama3-8b` |
+| Titan Text Premier | `titan-text` |
 
-## Prerequisites
+---
 
-- Python 3.8 or higher
-- AWS Account with Bedrock access
-- AWS CLI configured
-- Modern web browser
+## Option 1 — Docker (recommended for EC2 / servers)
 
-## Quick Start
+### Prerequisites
 
-### Option 1: Automated Setup (Recommended)
+- Docker and Docker Compose installed
+- EC2 IAM role with the following policies attached:
+  - `AmazonBedrockFullAccess`
+  - `AmazonRekognitionFullAccess`
+  - `AmazonTextractFullAccess`
 
-**Linux/Mac:**
-```bash
-cd ai-web-app
-chmod +x start.sh
-./start.sh
-```
+No AWS keys needed — credentials come automatically from the EC2 IAM role.
 
-**Windows:**
-```batch
-cd ai-web-app
-start.bat
-```
-
-The automated setup will:
-- Install Python dependencies
-- Initialize the database with default admin user
-- Start both backend and frontend servers
-- Display login credentials
-
-### Option 2: Manual Setup
-
-### 1. Clone and Setup
+### Quick deploy on EC2 (RHEL 9)
 
 ```bash
-cd ai-web-app
+git clone <your-repo-url> ai-web-chat-app
+cd ai-web-chat-app
+
+# Edit SECRET_KEY in docker-compose.yml before launching
+nano docker-compose.yml
+
+bash deploy.sh
 ```
 
-### 2. Backend Setup
+`deploy.sh` installs Docker CE, builds the images, and starts all containers.
+
+### Manual Docker commands
 
 ```bash
-# Navigate to backend directory
+# Build and start
+docker compose up -d --build
+
+# View logs
+docker compose logs -f backend
+docker compose logs -f nginx
+
+# Check status
+docker compose ps
+
+# Stop (database is preserved in Docker volume)
+docker compose down
+
+# Update after code changes
+git pull
+docker compose up -d --build
+```
+
+### Access
+
+```
+http://<private-ip>:8080
+```
+
+Open port **8080** in your EC2 Security Group (inbound, TCP).
+
+### Configuration (docker-compose.yml)
+
+```yaml
+environment:
+  AWS_DEFAULT_REGION: us-east-1           # your Bedrock region
+  SECRET_KEY: change_me_to_random_string  # change this
+  DEFAULT_CHAT_MODEL: claude-sonnet-4-5
+  DEFAULT_CODE_MODEL: claude-sonnet-4-5
+  MAX_TOKENS: "2048"
+```
+
+### Architecture
+
+```
+:8080
+  Nginx  →  /api/*  →  Flask :5001 (internal)
+         →  /*      →  React SPA (static)
+                          ↓
+                    AWS Bedrock / Rekognition / Textract
+                          ↓
+                    sqlite_data (Docker named volume on EBS)
+```
+
+---
+
+## Option 2 — Local (without Docker)
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- AWS CLI configured (`aws configure`)
+- AWS credentials with Bedrock access
+
+### 1. Backend setup
+
+```bash
 cd backend
 
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-# venv\Scripts\activate
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Initialize database
+# Configure environment
+cp .env.template.new .env
+# Edit .env — set at minimum:
+#   AWS_DEFAULT_REGION=us-east-1
+#   SECRET_KEY=any-random-string
+
+# Initialize database (creates admin user)
 python init_db.py
 
-# Copy environment template and configure
-cp backend/.env.template.new backend/.env
-# Configure AWS region (credentials handled by AWS CLI)
-echo "AWS_DEFAULT_REGION=us-east-1" >> backend/.env
-```
-
-### 3. AWS Configuration (SECURE SETUP)
-
-**🔐 New Secure Credential Management**: This application now uses AWS CLI credentials instead of storing them in `.env` files for better security.
-
-#### Option 1: AWS CLI (Recommended)
-```bash
-# Install AWS CLI
-brew install awscli  # macOS
-# or follow AWS documentation for other platforms
-
-# Configure credentials securely
-aws configure
-```
-
-#### Option 2: AWS Profiles (Multiple Environments)
-```bash
-# Configure different profiles
-aws configure --profile development
-aws configure --profile production
-
-# Set profile in .env
-echo "AWS_PROFILE=development" >> backend/.env
-```
-
-#### Additional Setup:
-1. Enable Bedrock models in AWS Console
-2. Configure IAM permissions (see docs/AWS_SETUP.md)
-3. Test setup: `python test_aws_credentials.py`
-
-For detailed instructions, see:
-- `docs/SECURE_AWS_CREDENTIALS.md` - New secure credential guide
-- `docs/AWS_SETUP.md` - Original AWS setup guide
-
-### 4. Run the Application
-
-```bash
-# Start the backend server
-cd backend
+# Start backend
 python app.py
-
-# In a new terminal, serve the frontend
-cd frontend
-# Using Python's built-in server:
-python -m http.server 8000
-# Or using any other static file server
 ```
 
-### 5. Access the Application
+Backend runs on `http://localhost:5001`.
 
-Open your browser and navigate to:
-- Frontend: `http://localhost:8000`
-- Backend API: `http://localhost:5001`
+### 2. Frontend setup
 
-### 6. First Login
+```bash
+cd frontend-new
 
-Use the default admin credentials:
-- **Username**: `admin`
-- **Password**: `admin123`
+# Install dependencies
+npm install
 
-⚠️ **Important**: Change the default password immediately after first login!
+# Start dev server (with hot reload, proxies /api to localhost:5001)
+npm run dev
+```
 
-For detailed authentication information, see [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md).
+Frontend dev server runs on `http://localhost:5173`.
+
+Alternatively, build and serve the static files:
+
+```bash
+npm run build           # outputs to frontend/dist/
+cd ../frontend/dist
+python3 -m http.server 8000
+# access at http://localhost:8000
+```
+
+### 3. Or use the start script
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+This installs dependencies, builds the frontend, starts the backend, and serves the built app on port 8000.
+
+### AWS credentials (local)
+
+```bash
+# Configure default profile
+aws configure
+
+# Or use a named profile
+aws configure --profile myprofile
+# then set in backend/.env:
+# AWS_PROFILE=myprofile
+```
+
+Verify setup:
+
+```bash
+python test_aws_credentials.py
+```
+
+---
+
+## Default Admin Account
+
+| Field | Value |
+|---|---|
+| Username | `admin` |
+| Password | `admin123` |
+
+**Change the password immediately after first login.**
+
+To reset admin credentials:
+
+```bash
+# Local
+cd backend && python reset_admin.py
+
+# Docker
+docker compose exec backend python reset_admin.py
+```
+
+---
 
 ## Project Structure
 
 ```
-ai-web-app/
-├── README.md
-├── AUTHENTICATION_GUIDE.md   # Detailed authentication documentation
-├── start.sh                  # Linux/Mac startup script
-├── start.bat                 # Windows startup script
-├── docs/
-│   └── AWS_SETUP.md          # Detailed AWS setup instructions
+ai-web-chat-app/
+├── docker-compose.yml          # Docker orchestration
+├── deploy.sh                   # EC2 one-shot deploy script (RHEL 9)
+├── start.sh                    # Local start script
+│
 ├── backend/
-│   ├── app.py                # Main Flask application
-│   ├── config.py             # Configuration settings
-│   ├── models.py             # Database models (Users, Logs, etc.)
-│   ├── auth.py               # Authentication routes and logic
-│   ├── logs.py               # Logging routes and utilities
-│   ├── init_db.py            # Database initialization script
-│   ├── requirements.txt      # Python dependencies
-│   ├── .env.template         # Environment variables template
-│   ├── ai_web_app.db         # SQLite database (auto-created)
-│   └── uploads/              # Temporary file uploads (auto-created)
-└── frontend/
-    ├── index.html            # Main HTML file with auth modals
-    ├── style.css             # Styling and responsive design
-    └── script.js             # Frontend JavaScript with auth logic
+│   ├── Dockerfile
+│   ├── entrypoint.sh           # DB init + gunicorn start
+│   ├── app.py                  # Flask app, streaming endpoints
+│   ├── config.py               # Model registry, config
+│   ├── models.py               # SQLAlchemy models
+│   ├── auth.py                 # Auth routes
+│   ├── logs.py                 # Logging routes
+│   ├── admin.py                # Admin routes
+│   ├── aws_credentials.py      # Secure AWS credential manager
+│   ├── requirements.txt        # Pinned Python dependencies
+│   └── init_db.py              # DB init + default admin
+│
+├── frontend-new/               # React + Vite source
+│   ├── src/
+│   │   ├── components/         # Chat, Code, Auth, Admin, History, ...
+│   │   ├── hooks/              # useStream, useAuth, useToast
+│   │   └── api/client.js       # API wrapper
+│   └── package.json
+│
+├── nginx/
+│   ├── Dockerfile              # Multi-stage: node build + nginx serve
+│   └── nginx.conf              # SPA routing + /api proxy + SSE headers
+│
+└── frontend/dist/              # Built React app (generated, not committed)
 ```
+
+---
 
 ## API Endpoints
 
-### Authentication Endpoints (New)
-- **POST** `/api/auth/register` - User registration
-- **POST** `/api/auth/login` - User login
-- **POST** `/api/auth/logout` - User logout
-- **GET** `/api/auth/check` - Check authentication status
-- **GET** `/api/auth/profile` - Get user profile
-- **PUT** `/api/auth/profile` - Update user profile
-- **POST** `/api/auth/change-password` - Change password
+### Auth
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Register new user |
+| POST | `/api/auth/login` | Login |
+| POST | `/api/auth/logout` | Logout |
+| GET | `/api/auth/check` | Check session |
+| GET | `/api/auth/profile` | Get profile |
+| POST | `/api/auth/change-password` | Change password |
 
-### Logging Endpoints (New)
-- **GET** `/api/logs/searches` - Get search history
-- **GET** `/api/logs/actions` - Get user actions
-- **GET** `/api/logs/logins` - Get login history
-- **GET** `/api/logs/stats` - Get usage statistics
-- **GET** `/api/logs/export` - Export all user data
+### AI (all require login, all stream SSE)
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/chat` | Chat — body: `{message, model}` |
+| POST | `/api/code-chat` | Coding assistant — body: `{message, model}` |
+| POST | `/api/document-analyze` | Document analysis — multipart file |
+| POST | `/api/generate-image` | Image generation — body: `{prompt}` |
+| POST | `/api/analyze-image` | Image analysis — multipart file |
+| GET | `/api/models` | List available models |
 
-### AI Endpoints (Now Protected)
-- **POST** `/api/chat` - General purpose AI chat
-- **POST** `/api/code-chat` - Coding assistant
-- **POST** `/api/document-analyze` - Document analysis
-- **POST** `/api/generate-image` - Image generation
-- **POST** `/api/analyze-image` - Image analysis
+### Logs
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/logs/searches` | Search history |
+| GET | `/api/logs/actions` | Action history |
+| GET | `/api/logs/logins` | Login history |
+| GET | `/api/logs/stats` | Usage stats |
+| GET | `/api/logs/export` | Export all data as JSON |
 
-### System Endpoints
-- **GET** `/api/health` - Health check with auth status
+### System
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/health` | Health check |
+| GET | `/api/aws-status` | AWS credential status |
 
-**Note**: All AI endpoints now require authentication. Users must be logged in to access these features.
-
-## Supported File Types
-
-### Documents
-- Text files (.txt)
-- PDF files (.pdf)
-- Word documents (.doc, .docx)
-
-### Images
-- PNG (.png)
-- JPEG (.jpg, .jpeg)
-- GIF (.gif)
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the backend directory:
-
-```env
-# Required
-AWS_DEFAULT_REGION=us-east-1
-SECRET_KEY=your-flask-secret-key
-
-# Optional - AWS Profile (recommended for multiple environments)
-AWS_PROFILE=your-profile-name
-
-# Legacy (NOT RECOMMENDED - use AWS CLI instead)
-# AWS_ACCESS_KEY_ID=your_access_key
-# AWS_SECRET_ACCESS_KEY=your_secret_key
-```
-
-**Security Note**: The application now prioritizes AWS CLI credentials over environment variables. Use `aws configure` for secure credential management.
-
-### Model Configuration
-
-The application uses these AWS Bedrock models by default:
-- **Claude 3 Sonnet**: `anthropic.claude-3-sonnet-20240229-v1:0`
-- **Titan Image Generator**: `amazon.titan-image-generator-v1`
-
-You can modify these in `config.py` or override via environment variables.
-
-## Features in Detail
-
-### 🤖 AI Chatbot
-- General purpose conversational AI
-- Supports markdown formatting in responses
-- Real-time chat interface
-- Message history within session
-
-### 📄 Document Analyzer
-- Upload documents via drag-and-drop or file picker
-- Extracts key insights and summaries
-- Supports multiple document formats
-- Automatic file cleanup after processing
-
-### 💻 Coding Assistant
-- Specialized for programming questions
-- Code syntax highlighting
-- Supports multiple programming languages
-- Best practices and debugging help
-
-### 🎨 Image Generator
-- Text-to-image generation using Titan
-- Customizable prompts
-- Download generated images
-- High-quality 512x512 output
-
-### 🔍 Image Analyzer
-- Upload images for AI analysis
-- Detailed descriptions of image content
-- Object and scene recognition
-- Visual preview of uploaded images
+---
 
 ## Troubleshooting
 
-### Common Issues
+**Bedrock access denied**
+- Ensure models are enabled in AWS Console → Bedrock → Model access
+- Check IAM role/user has `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
+- Run `python test_aws_credentials.py` to verify
 
-1. **AWS Bedrock Access Denied**
-   - Ensure you have requested access to models in AWS Console
-   - Check IAM permissions
-   - Verify AWS credentials
+**Streaming not working behind a proxy / load balancer**
+- Ensure proxy has `proxy_buffering off` and long read timeouts (nginx.conf already set to 300s)
 
-2. **Backend Connection Failed**
-   - Make sure Flask server is running on port 5000
-   - Check firewall settings
-   - Verify CORS configuration
+**Docker: backend stays unhealthy**
+```bash
+docker compose logs backend   # check for startup errors
+```
 
-3. **File Upload Issues**
-   - Check file size limits (16MB max)
-   - Ensure file types are supported
-   - Verify upload directory permissions
+**Local: frontend can't reach backend**
+- Ensure backend is running on port 5001
+- In dev mode (`npm run dev`) the Vite proxy handles `/api` automatically
+- In built mode, ensure backend CORS allows the frontend origin
 
-### Debug Mode
-
-Enable debug mode by setting `FLASK_ENV=development` in your `.env` file.
-
-## Security Considerations
-
-- Never commit AWS credentials to version control
-- Use IAM roles with minimal required permissions
-- Implement rate limiting for production use
-- Validate and sanitize all file uploads
-- Use HTTPS in production
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Support
-
-For issues and questions:
-1. Check the troubleshooting section
-2. Review AWS Bedrock documentation
-3. Open an issue on the repository
-
-## Acknowledgments
-
-- AWS Bedrock for AI model access
-- Anthropic Claude for conversational AI
-- Amazon Titan for image generation
-- Flask community for the web framework
+**File upload fails**
+- Max size is 16 MB
+- Supported: `.txt`, `.md`, `.pdf`, `.doc`, `.docx`, `.png`, `.jpg`, `.jpeg`, `.gif`

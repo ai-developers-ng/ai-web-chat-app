@@ -2,7 +2,7 @@ import os
 import json
 import base64
 import time
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 from flask_login import LoginManager, login_required, current_user
 from flask_migrate import Migrate
@@ -26,7 +26,7 @@ import shutil
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, static_folder='../frontend', static_url_path='')
+app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 app.config.from_object(Config)
 
 # Initialize extensions
@@ -41,6 +41,7 @@ login_manager.login_message = 'Please log in to access this page.'
 _ALLOWED_ORIGINS = [
     'http://localhost:3000', 'http://127.0.0.1:3000',
     'http://localhost:5001', 'http://127.0.0.1:5001',
+    'http://localhost:5173', 'http://127.0.0.1:5173',  # Vite dev server
     'http://localhost:8000', 'http://127.0.0.1:8000'
 ]
 CORS(
@@ -109,42 +110,86 @@ except Exception as e:
     logger.error(f"Failed to initialize AWS Bedrock client: {e}")
     bedrock_runtime = None
 
+def build_bedrock_request(provider: str, message: str, system_prompt: str) -> dict:
+    """Build the correct request body for each Bedrock model provider."""
+    if provider == "anthropic":
+        return {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 4096,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": message}],
+            "temperature": Config.TEMPERATURE,
+        }
+    if provider == "meta":
+        combined = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{message} [/INST]"
+        return {
+            "prompt": combined,
+            "max_gen_len": Config.MAX_TOKENS,
+            "temperature": Config.TEMPERATURE,
+            "top_p": 0.9,
+        }
+    if provider == "amazon":
+        # Amazon Nova models use the Messages API (same shape as Anthropic)
+        return {
+            "messages": [{"role": "user", "content": [{"text": message}]}],
+            "system": [{"text": system_prompt}],
+            "inferenceConfig": {
+                "maxTokens": Config.MAX_TOKENS,
+                "temperature": Config.TEMPERATURE,
+            },
+        }
+    raise ValueError(f"Unknown provider: {provider}")
+
+
+def parse_stream_chunk(provider: str, chunk_bytes: bytes) -> str:
+    """Extract the text delta from a single Bedrock streaming event."""
+    try:
+        payload = json.loads(chunk_bytes)
+    except Exception:
+        return ""
+
+    if provider == "anthropic":
+        if payload.get("type") == "content_block_delta":
+            return payload.get("delta", {}).get("text", "")
+        return ""
+
+    if provider == "meta":
+        # Meta Llama streaming returns {'generation': '...'} per chunk
+        return payload.get("generation", "")
+
+    if provider == "amazon":
+        # Nova streaming returns {'contentBlockDelta': {'delta': {'text': '...'}}}
+        return payload.get("contentBlockDelta", {}).get("delta", {}).get("text", "")
+
+    return ""
+
+
 def invoke_llama(prompt, system_prompt="You are a helpful AI assistant.", image_data=None, image_media_type=None):
-    """Invoke Meta Llama 3 instruct model with optional image (multi-modal not yet supported for all variants)."""
+    """Synchronous Llama invocation — kept for document_analyze / image summarization helpers."""
     if not bedrock_runtime:
         return {"error": "AWS Bedrock client not initialized"}
-
     try:
-        # Current Bedrock Meta Llama 3 models expect a simple JSON with a 'prompt' key.
-        # The previous implementation used a 'messages' structure (Anthropic style) which caused ValidationException.
-        # We combine system and user into a single prompt. Optionally we could add special tokens, but plain text works.
-        combined_prompt = f"System: {system_prompt}\nUser: {prompt}\nAssistant:"  # trailing 'Assistant:' to guide continuation
-
+        combined_prompt = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{prompt} [/INST]"
         body = {
             "prompt": combined_prompt,
-            "max_gen_len": Config.MAX_TOKENS,  # maps to maximum new tokens
+            "max_gen_len": Config.MAX_TOKENS,
             "temperature": Config.TEMPERATURE,
-            "top_p": 0.9
+            "top_p": 0.9,
         }
-
         response = bedrock_runtime.invoke_model(
             modelId=Config.LLAMA_MODEL_ID,
-            body=json.dumps(body)
+            body=json.dumps(body),
         )
-        response_body = json.loads(response['body'].read())
-
-        # Meta Llama on Bedrock typically returns either {'generation': '...'} or {'outputs':[{'text':'...'}]}.
-        text = response_body.get('generation')
-        if not text and 'outputs' in response_body:
-            outputs = response_body['outputs']
+        response_body = json.loads(response["body"].read())
+        text = response_body.get("generation")
+        if not text and "outputs" in response_body:
+            outputs = response_body["outputs"]
             if outputs and isinstance(outputs, list):
                 first = outputs[0]
                 if isinstance(first, dict):
-                    text = first.get('text') or first.get('generation')
+                    text = first.get("text") or first.get("generation")
         if not text:
-            # Fallback to stringifying (trim to avoid huge payloads)
             text = json.dumps(response_body)[:10000]
-
         return {"response": text}
     except ClientError as e:
         logger.error(f"AWS Bedrock error: {e}")
@@ -366,30 +411,88 @@ def _extract_doc_with_tool(filepath: str) -> str:
 def index():
     return send_from_directory(app.static_folder, 'index.html')
 
+@app.route('/api/models', methods=['GET'])
+@login_required
+def get_models():
+    """Return the list of available chat/code models."""
+    return jsonify(Config.MODELS)
+
+
 @app.route('/api/chat', methods=['POST'])
 @login_required
 def chat():
-    """General AI chatbot endpoint"""
-    start_time = time.time()
-    
+    """General AI chatbot endpoint — streams SSE tokens."""
     data = request.get_json()
     if not data or 'message' not in data:
         return jsonify({"error": "Message is required"}), 400
-    
+
     message = data['message']
-    system_prompt = "You are a helpful, friendly, and knowledgeable AI assistant. Provide clear, accurate, and helpful responses to user questions."
-    
-    # Log user action
-    log_user_action('chat_request', {'message_length': len(message)})
-    
-    result = invoke_llama(message, system_prompt)
-    
-    # Log search
-    response_time = time.time() - start_time
-    response_text = result.get('response', result.get('error', ''))
-    log_search('chat', message, response_text, response_time)
-    
-    return jsonify(result)
+    model_key = data.get('model', Config.DEFAULT_CHAT_MODEL)
+    model = Config.MODELS.get(model_key)
+    if not model:
+        return jsonify({"error": f"Unknown model: {model_key}"}), 400
+
+    if not bedrock_runtime:
+        return jsonify({"error": "AWS Bedrock client not initialized"}), 503
+
+    system_prompt = (
+        "You are a helpful, friendly, and knowledgeable AI assistant. "
+        "Provide clear, accurate, and helpful responses to user questions."
+    )
+
+    log_user_action('chat_request', {'message_length': len(message), 'model': model_key})
+
+    # Capture request-context values before the generator runs outside the request context
+    _user_id = current_user.id
+    _ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'unknown'))
+    _ua = request.headers.get('User-Agent', 'unknown')
+    start_time = time.time()
+    full_response_parts = []
+
+    def generate():
+        nonlocal full_response_parts
+        try:
+            body = build_bedrock_request(model['provider'], message, system_prompt)
+            stream = bedrock_runtime.invoke_model_with_response_stream(
+                modelId=model['id'],
+                body=json.dumps(body),
+            )
+            for event in stream['body']:
+                chunk_bytes = event.get('chunk', {}).get('bytes', b'')
+                if not chunk_bytes:
+                    continue
+                text = parse_stream_chunk(model['provider'], chunk_bytes)
+                if text:
+                    full_response_parts.append(text)
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+            yield "data: [DONE]\n\n"
+        except ClientError as e:
+            logger.error(f"Bedrock error in /api/chat: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception as e:
+            logger.error(f"Error in /api/chat stream: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        finally:
+            response_time = time.time() - start_time
+            full_text = "".join(full_response_parts)
+            try:
+                from models import SearchLog
+                with app.app_context():
+                    log = SearchLog(
+                        user_id=_user_id, search_type='chat', query=message,
+                        response=full_text, response_time=response_time,
+                        ip_address=_ip, user_agent=_ua, model_id=model_key,
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+            except Exception as _e:
+                logger.warning(f"Failed to log chat search: {_e}")
+
+    return Response(
+        stream_with_context(generate()),
+        content_type='text/event-stream',
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 @app.route('/api/document-analyze', methods=['POST'])
 @login_required
@@ -533,34 +636,85 @@ def document_analyze():
 @app.route('/api/code-chat', methods=['POST'])
 @login_required
 def code_chat():
-    """Coding chatbot endpoint"""
-    start_time = time.time()
-    
+    """Coding assistant endpoint — streams SSE tokens."""
     data = request.get_json()
     if not data or 'message' not in data:
         return jsonify({"error": "Message is required"}), 400
-    
+
     message = data['message']
-    system_prompt = """You are an expert software engineer and coding assistant. Help users with:
-    - Writing clean, efficient code
-    - Debugging and troubleshooting
-    - Code reviews and optimization
-    - Best practices and design patterns
-    - Explaining complex programming concepts
-    
-    Always provide clear explanations and well-commented code examples."""
-    
-    # Log user action
-    log_user_action('code_chat_request', {'message_length': len(message)})
-    
-    result = invoke_llama(message, system_prompt)
-    
-    # Log search
-    response_time = time.time() - start_time
-    response_text = result.get('response', result.get('error', ''))
-    log_search('code', message, response_text, response_time)
-    
-    return jsonify(result)
+    model_key = data.get('model', Config.DEFAULT_CODE_MODEL)
+    model = Config.MODELS.get(model_key)
+    if not model:
+        return jsonify({"error": f"Unknown model: {model_key}"}), 400
+
+    if not bedrock_runtime:
+        return jsonify({"error": "AWS Bedrock client not initialized"}), 503
+
+    system_prompt = (
+        "You are an expert software engineer and coding assistant. Help users with:\n"
+        "- Writing clean, efficient, production-quality code\n"
+        "- Debugging and troubleshooting\n"
+        "- Code reviews and optimization\n"
+        "- Best practices and design patterns\n"
+        "- Explaining complex programming concepts\n\n"
+        "Always provide well-structured responses with syntax-highlighted code blocks. "
+        "Specify the language in every code fence (e.g. ```python). "
+        "Add brief comments to non-obvious code."
+    )
+
+    log_user_action('code_chat_request', {'message_length': len(message), 'model': model_key})
+
+    # Capture request-context values before the generator runs outside the request context
+    _user_id = current_user.id
+    _ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'unknown'))
+    _ua = request.headers.get('User-Agent', 'unknown')
+    start_time = time.time()
+    full_response_parts = []
+
+    def generate():
+        nonlocal full_response_parts
+        try:
+            body = build_bedrock_request(model['provider'], message, system_prompt)
+            stream = bedrock_runtime.invoke_model_with_response_stream(
+                modelId=model['id'],
+                body=json.dumps(body),
+            )
+            for event in stream['body']:
+                chunk_bytes = event.get('chunk', {}).get('bytes', b'')
+                if not chunk_bytes:
+                    continue
+                text = parse_stream_chunk(model['provider'], chunk_bytes)
+                if text:
+                    full_response_parts.append(text)
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+            yield "data: [DONE]\n\n"
+        except ClientError as e:
+            logger.error(f"Bedrock error in /api/code-chat: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception as e:
+            logger.error(f"Error in /api/code-chat stream: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        finally:
+            response_time = time.time() - start_time
+            full_text = "".join(full_response_parts)
+            try:
+                from models import SearchLog
+                with app.app_context():
+                    log = SearchLog(
+                        user_id=_user_id, search_type='code', query=message,
+                        response=full_text, response_time=response_time,
+                        ip_address=_ip, user_agent=_ua, model_id=model_key,
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+            except Exception as _e:
+                logger.warning(f"Failed to log code search: {_e}")
+
+    return Response(
+        stream_with_context(generate()),
+        content_type='text/event-stream',
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 @app.route('/api/generate-image', methods=['POST'])
 @login_required

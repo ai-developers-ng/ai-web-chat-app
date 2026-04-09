@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# Node
+**/node_modules
+frontend-new/.vite-cache
+frontend-new/dist
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+backend/venv
+backend/.env
+backend/uploads/*
+backend/instance/
+backend/*.db
+
+# Built frontend (regenerated during Docker build)
+frontend/dist
+
+# Unrelated test project
+TEST/
+
+# Docs and scripts not needed in container
+*.md
+AUTHENTICATION_GUIDE.md
+DEPLOYMENT_GUIDE.md
+SECURITY_IMPROVEMENTS_SUMMARY.md
+DATABASE_QUERY_INSTRUCTIONS.md

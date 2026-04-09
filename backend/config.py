@@ -13,11 +13,66 @@ class Config:
     AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
     
-    # Bedrock Model IDs
-    # Primary chat / code generation model (Meta Llama 3 instruct)
-    LLAMA_MODEL_ID = os.getenv('LLAMA_MODEL_ID', 'meta.llama3-70b-instruct-v1:0')
+    # Bedrock Model IDs — image & vision (unchanged)
     TITAN_IMAGE_MODEL_ID = "amazon.titan-image-generator-v2:0"
     TITAN_VISION_MODEL_ID = os.getenv('TITAN_VISION_MODEL_ID', '')  # Optional: Titan multimodal caption model
+
+    # Multi-model registry — all text/chat models available via AWS Bedrock
+    #
+    # Each model ID can be overridden via environment variable so you can
+    # paste the exact ID from: python backend/check_models.py
+    #
+    # Newer Claude models (Sonnet/Opus 4.x) are typically only available
+    # through cross-region inference profiles — IDs start with "us." for
+    # us-east-1 / us-west-2.  Run check_models.py to confirm what is
+    # enabled in your account and region.
+    MODELS = {
+        "claude-sonnet-4-5": {
+            "id": os.getenv(
+                'MODEL_ID_CLAUDE_SONNET_45',
+                'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+            ),
+            "name": "Claude Sonnet 4.5",
+            "provider": "anthropic",
+        },
+        "claude-opus-4-5": {
+            "id": os.getenv(
+                'MODEL_ID_CLAUDE_OPUS_45',
+                'us.anthropic.claude-opus-4-5-20251101-v1:0',
+            ),
+            "name": "Claude Opus 4.5",
+            "provider": "anthropic",
+        },
+        "llama3-70b": {
+            "id": os.getenv(
+                'MODEL_ID_LLAMA3_70B',
+                'meta.llama3-70b-instruct-v1:0',
+            ),
+            "name": "Llama 3 70B",
+            "provider": "meta",
+        },
+        "llama3-8b": {
+            "id": os.getenv(
+                'MODEL_ID_LLAMA3_8B',
+                'meta.llama3-8b-instruct-v1:0',
+            ),
+            "name": "Llama 3 8B",
+            "provider": "meta",
+        },
+        "nova-pro": {
+            "id": os.getenv(
+                'MODEL_ID_NOVA_PRO',
+                'amazon.nova-pro-v1:0',
+            ),
+            "name": "Amazon Nova Pro",
+            "provider": "amazon",
+        },
+    }
+    DEFAULT_CHAT_MODEL = os.getenv('DEFAULT_CHAT_MODEL', 'claude-sonnet-4-5')
+    DEFAULT_CODE_MODEL = os.getenv('DEFAULT_CODE_MODEL', 'claude-sonnet-4-5')
+
+    # Legacy — kept so document_analyze helper can still call invoke_llama fallback
+    LLAMA_MODEL_ID = os.getenv('LLAMA_MODEL_ID', 'meta.llama3-70b-instruct-v1:0')
     
     # Flask Configuration
     SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here-change-in-production')

@@ -92,6 +92,7 @@ class SearchLog(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     ip_address = db.Column(db.String(45))
     user_agent = db.Column(db.String(500))
+    model_id = db.Column(db.String(100))  # Which model key was used (e.g. 'claude-sonnet-4-5')
     
     def to_dict(self):
         """Convert search log to dictionary"""
@@ -104,7 +105,8 @@ class SearchLog(db.Model):
             'response_time': self.response_time,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'ip_address': self.ip_address,
-            'user_agent': self.user_agent
+            'user_agent': self.user_agent,
+            'model_id': self.model_id,
         }
     
     def __repr__(self):

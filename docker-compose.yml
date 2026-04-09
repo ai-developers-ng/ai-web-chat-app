@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    expose:
+      - "5001"               # internal only — nginx proxies to this
+    environment:
+      # AWS — credentials come from the EC2 IAM role automatically (no keys needed)
+      AWS_DEFAULT_REGION: us-east-1
+
+      # Flask
+      SECRET_KEY: change_me_to_a_long_random_string_before_deploying
+
+      # Database — absolute path inside the sqlite_data volume
+      DATABASE_URL: sqlite:////app/data/ai_web_app.db
+
+      # Default models (must match keys in config.py MODELS dict)
+      DEFAULT_CHAT_MODEL: claude-sonnet-4-5
+      DEFAULT_CODE_MODEL: claude-sonnet-4-5
+      MAX_TOKENS: "2048"
+
+      # Optional: set TEXTRACT_S3_BUCKET to enable async PDF analysis
+      # TEXTRACT_S3_BUCKET: your-bucket-name
+
+    volumes:
+      - sqlite_data:/app/data      # SQLite database (persists across restarts)
+      - uploads_data:/app/uploads  # Temporary file uploads
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports:
+      - "8080:80"              # Open port 8080 in your EC2 Security Group
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:
+  uploads_data:
